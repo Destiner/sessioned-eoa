@@ -1,6 +1,7 @@
 {
   "name": "sessioned-eoa",
   "version": "1.0.0",
+  "private": true,
   "description": "EOA with a session key",
   "author": {
     "name": "Timur Badretdinov",
