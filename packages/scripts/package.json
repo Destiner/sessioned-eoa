@@ -1,0 +1,12 @@
+{
+  "name": "@sessioned-eoa/scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "solady": "^0.0.259",
+    "viem": "^2.21.29"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.11"
+  }
+}
