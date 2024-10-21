@@ -1,11 +1,17 @@
 <template>
   <div id="app">
+    <header>
+      <!-- eslint-disable-next-line vue/no-undef-components -->
+      <w3m-button />
+    </header>
     <RouterView />
   </div>
 </template>
 
 <script setup lang="ts">
 import { RouterView } from 'vue-router';
+
+import './appKit.ts';
 </script>
 
 <!-- eslint-disable-next-line vue/enforce-style-attribute -->

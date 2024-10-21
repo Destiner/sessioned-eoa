@@ -14,11 +14,15 @@
     "typecheck": "tsc --noEmit && vue-tsc --noEmit"
   },
   "dependencies": {
+    "@reown/appkit": "^1.1.6",
+    "@reown/appkit-adapter-wagmi": "^1.1.6",
     "@vueuse/core": "^11.1.0",
     "@vueuse/nuxt": "^11.1.0",
     "nuxt": "^3.13.2",
+    "viem": "^2.21.31",
     "vue": "^3.5.3",
-    "vue-router": "^4.4.3"
+    "vue-router": "^4.4.3",
+    "wagmi": "^2.12.20"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.0",
