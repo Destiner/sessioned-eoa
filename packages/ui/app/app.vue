@@ -1,9 +1,5 @@
 <template>
   <div id="app">
-    <header>
-      <!-- eslint-disable-next-line vue/no-undef-components -->
-      <w3m-button />
-    </header>
     <RouterView />
   </div>
 </template>
