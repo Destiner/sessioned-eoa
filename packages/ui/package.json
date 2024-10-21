@@ -4,20 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
+    "build": "nuxt build",
+    "dev": "nuxt dev --dotenv .env.local",
+    "generate": "nuxt generate",
     "lint": "bun run lint:prettier && bun run lint:eslint && bun run lint:stylelint",
-    "lint:prettier": "prettier -c \"src/**/*.{json,js,ts,vue}\"",
-    "lint:eslint": "eslint \"src/**/*.{js,ts,vue}\"",
-    "lint:stylelint": "stylelint \"src/**/*.{css,vue}\"",
+    "lint:prettier": "prettier -c \"{app,modules,server}/**/*.{json,js,ts,vue}\"",
+    "lint:eslint": "eslint \"{app,modules,server}/**/*.{js,ts,vue}\"",
+    "lint:stylelint": "stylelint \"app/**/*.{css,vue}\"",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit"
   },
   "dependencies": {
+    "@vueuse/core": "^11.1.0",
+    "@vueuse/nuxt": "^11.1.0",
+    "nuxt": "^3.13.2",
     "vue": "^3.5.3",
     "vue-router": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.0",
+    "@nuxt/eslint": "^0.6.0",
     "@vitejs/plugin-vue": "^5.1.3",
     "@vue/compiler-sfc": "^3.5.3",
     "eslint": "^9.11.0",
