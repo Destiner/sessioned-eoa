@@ -18,11 +18,11 @@
     "@reown/appkit-adapter-wagmi": "^1.1.6",
     "@vueuse/core": "^11.1.0",
     "@vueuse/nuxt": "^11.1.0",
+    "@wagmi/core": "^2.13.9",
     "nuxt": "^3.13.2",
     "viem": "^2.21.31",
     "vue": "^3.5.3",
-    "vue-router": "^4.4.3",
-    "wagmi": "^2.12.20"
+    "vue-router": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.0",
