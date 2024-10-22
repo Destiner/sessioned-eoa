@@ -14,12 +14,12 @@
     "typecheck": "tsc --noEmit && vue-tsc --noEmit"
   },
   "dependencies": {
-    "@reown/appkit": "^1.1.6",
-    "@reown/appkit-adapter-wagmi": "^1.1.6",
     "@vueuse/core": "^11.1.0",
     "@vueuse/nuxt": "^11.1.0",
+    "@wagmi/connectors": "^5.2.2",
     "@wagmi/core": "^2.13.9",
     "nuxt": "^3.13.2",
+    "radix-vue": "^1.9.7",
     "viem": "^2.21.31",
     "vue": "^3.5.3",
     "vue-router": "^4.4.3"

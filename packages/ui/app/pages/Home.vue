@@ -6,13 +6,20 @@
           <h2>Your account</h2>
           <div class="account-content">
             <template v-if="!isConnected">
-              <!-- eslint-disable-next-line vue/no-undef-components -->
-              <w3m-button />
+              <Button
+                label="Connect"
+                primary
+                @click="openConnectorModal"
+              />
             </template>
             <template v-else>
               <div>
                 <div>Address</div>
                 <div>{{ connectedAddress }}</div>
+                <Button
+                  label="Disconnect"
+                  @click="handleDisconnectClick"
+                />
               </div>
               <div>
                 <div>Balances</div>
@@ -150,13 +157,26 @@
         </div>
       </div>
     </div>
+    <DialogConnectors
+      v-model:model-value="isConnectorModalOpen"
+      @select="handleConnectorSelect"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { getBalance, readContract, writeContract } from '@wagmi/core';
+import type { Connector } from '@wagmi/core';
+import {
+  connect,
+  disconnect,
+  getBalance,
+  readContract,
+  switchChain,
+  writeContract,
+} from '@wagmi/core';
 import { parseEther, formatEther, isAddress } from 'viem';
 import type { Address } from 'viem';
+import { odysseyTestnet } from 'viem/chains';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import erc20Abi from '@/abi/erc20.js';
@@ -165,6 +185,7 @@ import tokenConverterAbi from '@/abi/tokenConverter.js';
 import tokenStakerAbi from '@/abi/tokenStaker.js';
 import wethAbi from '@/abi/weth.js';
 import Button from '@/components/Button.vue';
+import DialogConnectors from '@/components/DialogConnectors.vue';
 import Form from '@/components/Form.vue';
 import Input from '@/components/Input.vue';
 import Select from '@/components/Select.vue';
@@ -178,18 +199,35 @@ const TOKEN_CONVERTER_ADDRESS = '0xD36100d4d3328F29f4D56c6dE4b8a6292f9aa002';
 
 const accountAddress = '0xCab9F2377F4BdC15dcCB2D2F3799a03557cF0E7a';
 
-const isConnected = ref(true);
-const connectedAddress = ref<Address>(
-  '0x7D8e6cFb1b8709139631cAc4CC458f63611FFDF8',
-);
+const isConnected = ref(false);
+const connectedAddress = ref<Address | null>(null);
 
-const connectedEthBalance = ref<bigint>(parseEther('0.15'));
-const connectedExpBalance = ref<bigint>(parseEther('100'));
-const connectedLockedExpBalance = ref<bigint>(parseEther('0'));
+const isConnectorModalOpen = ref(false);
+function openConnectorModal(): void {
+  isConnectorModalOpen.value = true;
+}
+async function handleConnectorSelect(connector: Connector): Promise<void> {
+  isConnected.value = true;
+  isConnectorModalOpen.value = false;
+  const connectionResult = await connect(config, {
+    connector,
+  });
+  await switchChain(config, { chainId: odysseyTestnet.id });
+  connectedAddress.value = connectionResult.accounts[0];
+  fetchConnectedBalance();
+}
+function handleDisconnectClick(): void {
+  isConnected.value = false;
+  disconnect(config);
+}
 
-const accountEthBalance = ref<bigint>(parseEther('0.1'));
-const accountWethBalance = ref<bigint>(parseEther('0.05'));
-const accountUsdcBalance = ref<bigint>(parseEther('1200'));
+const connectedEthBalance = ref<bigint>(0n);
+const connectedExpBalance = ref<bigint>(0n);
+const connectedLockedExpBalance = ref<bigint>(0n);
+
+const accountEthBalance = ref<bigint>(0n);
+const accountWethBalance = ref<bigint>(0n);
+const accountUsdcBalance = ref<bigint>(0n);
 
 onMounted(() => {
   fetchBalances();
@@ -208,6 +246,9 @@ watch(
 );
 
 async function fetchConnectedBalance(): Promise<void> {
+  if (!connectedAddress.value) {
+    return;
+  }
   connectedEthBalance.value = (
     await getBalance(config, {
       address: connectedAddress.value,
@@ -269,6 +310,9 @@ const transferToken = ref<Address>(WETH_ADDRESS);
 const transferTarget = ref<string>('');
 
 async function mintExp(): Promise<void> {
+  if (!connectedAddress.value) {
+    return;
+  }
   const mintedAmount = parseEther('100');
   await writeContract(config, {
     abi: expTokenAbi,
@@ -285,6 +329,9 @@ async function mintExp(): Promise<void> {
 }
 
 async function lockExp(): Promise<void> {
+  if (!connectedAddress.value) {
+    return;
+  }
   const lockedAmount = parseEther('50');
   await writeContract(config, {
     abi: expTokenAbi,
