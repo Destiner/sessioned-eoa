@@ -57,18 +57,56 @@
                   :primary="
                     connectedEthBalance > 0n && connectedExpBalance === 0n
                   "
+                  :disabled="isMintingExp"
                   @click="mintExp"
+                />
+                <Button
+                  label="Approve EXP"
+                  :primary="
+                    connectedEthBalance > 0n &&
+                    connectedExpBalance > 0n &&
+                    connectedExpAllowance === 0n &&
+                    connectedLockedExpBalance === 0n
+                  "
+                  :disabled="isApprovingExp"
+                  @click="approveExp"
                 />
                 <Button
                   label="Lock EXP"
                   :primary="
                     connectedEthBalance > 0n &&
                     connectedExpBalance > 0n &&
+                    connectedExpAllowance > 0n &&
                     connectedLockedExpBalance === 0n
                   "
+                  :disabled="isLockingExp"
                   @click="lockExp"
                 />
               </div>
+              <a
+                v-if="mintExpTxHash"
+                :href="getTxLink(mintExpTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Explorer ↗
+              </a>
+              <a
+                v-if="approveExpTxHash"
+                :href="getTxLink(approveExpTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Explorer ↗
+              </a>
+              <a
+                v-if="lockExpTxHash"
+                :href="getTxLink(lockExpTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Explorer ↗
+              </a>
             </template>
           </div>
         </div>
@@ -99,6 +137,7 @@
                   <Button
                     label="Wrap Ether"
                     :disabled="
+                      isWrappingEth ||
                       !isWethDepositInputValid ||
                       wrapAmount === '' ||
                       !isConnected
@@ -106,6 +145,14 @@
                     @click="wethDeposit"
                   />
                 </Form>
+                <a
+                  v-if="wrapEthTxHash"
+                  :href="getTxLink(wrapEthTxHash)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Explorer ↗
+                </a>
                 <Form
                   v-model="unwrapAmount"
                   placeholder="amount"
@@ -114,6 +161,7 @@
                   <Button
                     label="Unwrap Ether"
                     :disabled="
+                      isUnwrappingEth ||
                       !isWethWithdrawInputValid ||
                       unwrapAmount === '' ||
                       !isConnected
@@ -121,6 +169,14 @@
                     @click="wethWithdraw"
                   />
                 </Form>
+                <a
+                  v-if="unwrapEthTxHash"
+                  :href="getTxLink(unwrapEthTxHash)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Explorer ↗
+                </a>
               </div>
             </div>
             <div
@@ -159,10 +215,21 @@
                 <Button
                   label="Swap"
                   :disabled="
-                    !isConvertInputValid || convertAmount === '' || !isConnected
+                    isConverting ||
+                    !isConvertInputValid ||
+                    convertAmount === '' ||
+                    !isConnected
                   "
                   @click="convert"
                 />
+                <a
+                  v-if="convertTxHash"
+                  :href="getTxLink(convertTxHash)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Explorer ↗
+                </a>
               </div>
             </div>
             <div
@@ -191,12 +258,21 @@
                 <Button
                   label="Send"
                   :disabled="
+                    isTransferring ||
                     !isTransferInputValid ||
                     transferAmount === '' ||
                     !isConnected
                   "
                   @click="transfer"
                 />
+                <a
+                  v-if="transferTxHash"
+                  :href="getTxLink(transferTxHash)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Explorer ↗
+                </a>
               </div>
             </div>
           </div>
@@ -222,6 +298,7 @@ import {
   useWriteContract,
   useConnectorClient,
   useSignMessage,
+  useClient,
 } from '@wagmi/vue';
 import { LibZip } from 'solady';
 import {
@@ -243,7 +320,7 @@ import {
   entryPoint07Abi,
   entryPoint07Address,
 } from 'viem/account-abstraction';
-import { addChain } from 'viem/actions';
+import { addChain, waitForTransactionReceipt } from 'viem/actions';
 import { odysseyTestnet } from 'viem/chains';
 import { computed, ref } from 'vue';
 
@@ -259,7 +336,6 @@ import Input from '@/components/Input.vue';
 import Select from '@/components/Select.vue';
 import useEnv from '@/composables/useEnv';
 import { Execution, getOpHash, prepare, submit } from '@/utils/sendOp';
-// import { config } from '@/wagmi';
 
 const TOKEN_STAKER_ADDRESS = '0xD54557044A1F7E7ffC92c3dA78Da98BbA49B4e71';
 const EXP_ADDRESS = '0xaa52Be611a9b620aFF67FbC79326e267cc3F2c69';
@@ -410,6 +486,25 @@ const isTransferInputValid = computed(
           parseEther(transferAmount.value) < accountUsdcBalance.value))),
 );
 
+///// Latest transactions
+
+const client = useClient();
+
+const mintExpTxHash = ref<Hex | null>(null);
+const isMintingExp = ref(false);
+const approveExpTxHash = ref<Hex | null>(null);
+const isApprovingExp = ref(false);
+const lockExpTxHash = ref<Hex | null>(null);
+const isLockingExp = ref(false);
+const wrapEthTxHash = ref<Hex | null>(null);
+const isWrappingEth = ref(false);
+const unwrapEthTxHash = ref<Hex | null>(null);
+const isUnwrappingEth = ref(false);
+const convertTxHash = ref<Hex | null>(null);
+const isConverting = ref(false);
+const transferTxHash = ref<Hex | null>(null);
+const isTransferring = ref(false);
+
 async function useOdysseyChain(): Promise<void> {
   try {
     await switchChainAsync({
@@ -469,42 +564,91 @@ async function mintExp(): Promise<void> {
   if (!connectedAddress.value) {
     return;
   }
+  isMintingExp.value = true;
+  mintExpTxHash.value = null;
   const mintedAmount = parseEther('200');
-  await writeContractAsync({
-    abi: expTokenAbi,
-    address: EXP_ADDRESS,
-    functionName: 'mint',
-    args: [connectedAddress.value, mintedAmount],
-    maxPriorityFeePerGas: parseGwei('5'),
-    maxFeePerGas: parseGwei('6'),
-  });
+  try {
+    const txHash = await writeContractAsync({
+      abi: expTokenAbi,
+      address: EXP_ADDRESS,
+      functionName: 'mint',
+      args: [connectedAddress.value, mintedAmount],
+      maxPriorityFeePerGas: parseGwei('5'),
+      maxFeePerGas: parseGwei('6'),
+    });
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await waitForTransactionReceipt(client.value, {
+      hash: txHash,
+    });
+    mintExpTxHash.value = txHash;
+    isMintingExp.value = false;
+  } catch {
+    isMintingExp.value = false;
+    return;
+  }
   connectedExpBalanceResult.refetch();
+}
+
+async function approveExp(): Promise<void> {
+  if (!connectedAddress.value) {
+    return;
+  }
+  isApprovingExp.value = true;
+  approveExpTxHash.value = null;
+  const approvedAmount = parseEther('100');
+  try {
+    const txHash = await writeContractAsync({
+      abi: expTokenAbi,
+      address: EXP_ADDRESS,
+      functionName: 'approve',
+      args: [TOKEN_STAKER_ADDRESS, approvedAmount],
+    });
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await waitForTransactionReceipt(client.value, {
+      hash: txHash,
+    });
+    approveExpTxHash.value = txHash;
+    isApprovingExp.value = false;
+  } catch {
+    isApprovingExp.value = false;
+    return;
+  }
+  connectedExpAllowanceResult.refetch();
 }
 
 async function lockExp(): Promise<void> {
   if (!connectedAddress.value) {
     return;
   }
+  isLockingExp.value = true;
+  lockExpTxHash.value = null;
   const lockedAmount = parseEther('100');
-  await writeContractAsync({
-    abi: expTokenAbi,
-    address: EXP_ADDRESS,
-    functionName: 'approve',
-    args: [TOKEN_STAKER_ADDRESS, lockedAmount],
-  });
-  while (connectedExpAllowance.value < lockedAmount) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    connectedExpAllowanceResult.refetch();
+  try {
+    const txHash = await writeContractAsync({
+      abi: tokenStakerAbi,
+      address: TOKEN_STAKER_ADDRESS,
+      functionName: 'stakeErc20',
+      args: [accountAddress, EXP_ADDRESS, lockedAmount],
+    });
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await waitForTransactionReceipt(client.value, {
+      hash: txHash,
+    });
+    lockExpTxHash.value = txHash;
+    isLockingExp.value = false;
+  } catch {
+    isLockingExp.value = false;
+    return;
   }
-  await writeContractAsync({
-    abi: tokenStakerAbi,
-    address: TOKEN_STAKER_ADDRESS,
-    functionName: 'stakeErc20',
-    args: [accountAddress, EXP_ADDRESS, lockedAmount],
-  });
 }
 
 async function wethDeposit(): Promise<void> {
+  isWrappingEth.value = true;
+  wrapEthTxHash.value = null;
+
   const amount = parseEther(wrapAmount.value);
   const opHash = await sendAnySignerOp([
     {
@@ -516,15 +660,25 @@ async function wethDeposit(): Promise<void> {
       }),
     },
   ]);
-  console.log('opHash', opHash);
-  for (let i = 0; i < 5; i++) {
-    accountEthBalanceResult.refetch();
-    accountWethBalanceResult.refetch();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  if (!opHash) {
+    isWrappingEth.value = false;
+    return;
   }
+  const txHash = await getOpTxHash(opHash);
+  if (!txHash) {
+    isWrappingEth.value = false;
+    return;
+  }
+  isWrappingEth.value = false;
+  wrapEthTxHash.value = txHash;
+  accountEthBalanceResult.refetch();
+  accountWethBalanceResult.refetch();
 }
 
 async function wethWithdraw(): Promise<void> {
+  isUnwrappingEth.value = true;
+  unwrapEthTxHash.value = null;
+
   const amount = parseEther(unwrapAmount.value);
   const opHash = await sendAnySignerOp([
     {
@@ -537,15 +691,25 @@ async function wethWithdraw(): Promise<void> {
       }),
     },
   ]);
-  console.log('opHash', opHash);
-  for (let i = 0; i < 5; i++) {
-    accountEthBalanceResult.refetch();
-    accountWethBalanceResult.refetch();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  if (!opHash) {
+    isUnwrappingEth.value = false;
+    return;
   }
+  const txHash = await getOpTxHash(opHash);
+  if (!txHash) {
+    isUnwrappingEth.value = false;
+    return;
+  }
+  isUnwrappingEth.value = false;
+  unwrapEthTxHash.value = txHash;
+  accountEthBalanceResult.refetch();
+  accountWethBalanceResult.refetch();
 }
 
 async function convert(): Promise<void> {
+  isConverting.value = true;
+  convertTxHash.value = null;
+
   const amount = parseEther(convertAmount.value);
   const token = convertToken.value;
   const opHash = await sendTokenSignerOp([
@@ -568,15 +732,25 @@ async function convert(): Promise<void> {
       }),
     },
   ]);
-  console.log('opHash', opHash);
-  for (let i = 0; i < 5; i++) {
-    accountWethBalanceResult.refetch();
-    accountUsdcBalanceResult.refetch();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  if (!opHash) {
+    isConverting.value = false;
+    return;
   }
+  const txHash = await getOpTxHash(opHash);
+  if (!txHash) {
+    isConverting.value = false;
+    return;
+  }
+  isConverting.value = false;
+  convertTxHash.value = txHash;
+  accountWethBalanceResult.refetch();
+  accountUsdcBalanceResult.refetch();
 }
 
 async function transfer(): Promise<void> {
+  isTransferring.value = true;
+  transferTxHash.value = null;
+
   const amount = parseEther(transferAmount.value);
   const token = transferToken.value;
   const target = transferTarget.value;
@@ -584,21 +758,48 @@ async function transfer(): Promise<void> {
     return;
   }
   // TODO send as user op
-  const txHash = await writeContractAsync({
-    abi: erc20Abi,
-    address: token,
-    functionName: 'transfer',
-    args: [target, amount],
-  });
-  console.log('txHash', txHash);
-  for (let i = 0; i < 5; i++) {
+  try {
+    const txHash = await writeContractAsync({
+      abi: erc20Abi,
+      address: token,
+      functionName: 'transfer',
+      args: [target, amount],
+    });
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await waitForTransactionReceipt(client.value, {
+      hash: txHash,
+    });
+    isTransferring.value = false;
+    transferTxHash.value = txHash;
     accountWethBalanceResult.refetch();
     accountUsdcBalanceResult.refetch();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  } catch {
+    isTransferring.value = false;
+    return;
   }
 }
 
-async function sendAnySignerOp(executions: Execution[]): Promise<Hex> {
+async function getOpTxHash(opHash: Hex): Promise<Hex | null> {
+  const publicClient = createPublicClient({
+    chain: odysseyTestnet,
+    transport: http(),
+  });
+  const bundlerClient = createBundlerClient({
+    client: publicClient,
+    transport: http(bundlerRpc),
+  });
+  try {
+    const receipt = await bundlerClient.waitForUserOperationReceipt({
+      hash: opHash,
+    });
+    return receipt.receipt.transactionHash;
+  } catch {
+    return null;
+  }
+}
+
+async function sendAnySignerOp(executions: Execution[]): Promise<Hex | null> {
   const op = await prepare(accountAddress, executions);
   await accountNonceResult.refetch();
   const nonce = accountNonceResult.data.value;
@@ -610,27 +811,31 @@ async function sendAnySignerOp(executions: Execution[]): Promise<Hex> {
   if (!hash) {
     throw new Error('Failed to get hash');
   }
-  const sessionOwnerSignature = await signMessageAsync({
-    message: {
-      raw: hash,
-    },
-  });
-  const permissionId =
-    '0xb3835f0d5bba72de2b0e64e8e2bb72944c103c2a5a2d2f9a48975ae991643796';
-  op.signature = encodeSessionSignature(permissionId, sessionOwnerSignature);
-  const publicClient = createPublicClient({
-    chain: odysseyTestnet,
-    transport: http(),
-  });
-  const bundlerClient = createBundlerClient({
-    client: publicClient,
-    transport: http(bundlerRpc),
-  });
-  const opHash = await submit(accountAddress, bundlerClient, op);
-  return opHash;
+  try {
+    const sessionOwnerSignature = await signMessageAsync({
+      message: {
+        raw: hash,
+      },
+    });
+    const permissionId =
+      '0xb3835f0d5bba72de2b0e64e8e2bb72944c103c2a5a2d2f9a48975ae991643796';
+    op.signature = encodeSessionSignature(permissionId, sessionOwnerSignature);
+    const publicClient = createPublicClient({
+      chain: odysseyTestnet,
+      transport: http(),
+    });
+    const bundlerClient = createBundlerClient({
+      client: publicClient,
+      transport: http(bundlerRpc),
+    });
+    const opHash = await submit(accountAddress, bundlerClient, op);
+    return opHash;
+  } catch {
+    return null;
+  }
 }
 
-async function sendTokenSignerOp(executions: Execution[]): Promise<Hex> {
+async function sendTokenSignerOp(executions: Execution[]): Promise<Hex | null> {
   const op = await prepare(accountAddress, executions);
   await accountNonceResult.refetch();
   const nonce = accountNonceResult.data.value;
@@ -642,24 +847,28 @@ async function sendTokenSignerOp(executions: Execution[]): Promise<Hex> {
   if (!hash) {
     throw new Error('Failed to get hash');
   }
-  const sessionOwnerSignature = await signMessageAsync({
-    message: {
-      raw: hash,
-    },
-  });
-  const permissionId =
-    '0xb6d0d36e150601d7d3a465cc34d0031dfc09501d68e37097ec07340cf476fdbd';
-  op.signature = encodeSessionSignature(permissionId, sessionOwnerSignature);
-  const publicClient = createPublicClient({
-    chain: odysseyTestnet,
-    transport: http(),
-  });
-  const bundlerClient = createBundlerClient({
-    client: publicClient,
-    transport: http(bundlerRpc),
-  });
-  const opHash = await submit(accountAddress, bundlerClient, op);
-  return opHash;
+  try {
+    const sessionOwnerSignature = await signMessageAsync({
+      message: {
+        raw: hash,
+      },
+    });
+    const permissionId =
+      '0xb6d0d36e150601d7d3a465cc34d0031dfc09501d68e37097ec07340cf476fdbd';
+    op.signature = encodeSessionSignature(permissionId, sessionOwnerSignature);
+    const publicClient = createPublicClient({
+      chain: odysseyTestnet,
+      transport: http(),
+    });
+    const bundlerClient = createBundlerClient({
+      client: publicClient,
+      transport: http(bundlerRpc),
+    });
+    const opHash = await submit(accountAddress, bundlerClient, op);
+    return opHash;
+  } catch {
+    return null;
+  }
 }
 
 function encodeSessionSignature(permissionId: Hex, signature: Hex): Hex {
@@ -685,6 +894,10 @@ function encodeSessionSignature(permissionId: Hex, signature: Hex): Hex {
 function encodeValidatorNonce(validator: Address): bigint {
   const hex = `0x0001${validator.slice(2)}0000`;
   return BigInt(hex);
+}
+
+function getTxLink(txHash: Hex): string {
+  return `https://odyssey-explorer.ithaca.xyz/tx/${txHash}`;
 }
 </script>
 
