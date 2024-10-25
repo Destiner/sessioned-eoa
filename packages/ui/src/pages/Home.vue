@@ -460,31 +460,31 @@ const isWethDepositInputValid = computed(
   () =>
     wrapAmount.value === '' ||
     (!isNaN(parseFloat(wrapAmount.value)) &&
-      parseEther(wrapAmount.value) < accountEthBalance.value),
+      parseEther(wrapAmount.value) <= accountEthBalance.value),
 );
 const isWethWithdrawInputValid = computed(
   () =>
     unwrapAmount.value === '' ||
     (!isNaN(parseFloat(unwrapAmount.value)) &&
-      parseEther(unwrapAmount.value) < accountWethBalance.value),
+      parseEther(unwrapAmount.value) <= accountWethBalance.value),
 );
 const isConvertInputValid = computed(
   () =>
     convertAmount.value === '' ||
     (!isNaN(parseFloat(convertAmount.value)) &&
       ((convertToken.value === WETH_ADDRESS &&
-        parseEther(convertAmount.value) < accountWethBalance.value) ||
+        parseEther(convertAmount.value) <= accountWethBalance.value) ||
         (convertToken.value === USDC_ADDRESS &&
-          parseEther(convertAmount.value) < accountUsdcBalance.value))),
+          parseEther(convertAmount.value) <= accountUsdcBalance.value))),
 );
 const isTransferInputValid = computed(
   () =>
     transferAmount.value === '' ||
     (!isNaN(parseFloat(transferAmount.value)) &&
       ((transferToken.value === WETH_ADDRESS &&
-        parseEther(transferAmount.value) < accountWethBalance.value) ||
+        parseEther(transferAmount.value) <= accountWethBalance.value) ||
         (transferToken.value === USDC_ADDRESS &&
-          parseEther(transferAmount.value) < accountUsdcBalance.value))),
+          parseEther(transferAmount.value) <= accountUsdcBalance.value))),
 );
 
 ///// Latest transactions
