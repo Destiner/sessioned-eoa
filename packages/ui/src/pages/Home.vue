@@ -85,7 +85,10 @@
               <div>{{ formatEther(accountWethBalance) }} WETH</div>
               <div>{{ formatEther(accountUsdcBalance) }} USDC</div>
             </div>
-            <div class="actions">
+            <div
+              class="actions"
+              :class="{ forbidden: !anySessionAvailable }"
+            >
               <h3>Everyone</h3>
               <div class="action-content">
                 <Form
@@ -108,7 +111,10 @@
                 </Form>
               </div>
             </div>
-            <div class="actions">
+            <div
+              class="actions"
+              :class="{ forbidden: !tokenSessionAvailable }"
+            >
               <h3>100 EXP locked</h3>
               <div class="action-content">
                 <Form
@@ -143,7 +149,10 @@
                 />
               </div>
             </div>
-            <div class="actions">
+            <div
+              class="actions"
+              :class="{ forbidden: !ownerSessionAvaialble }"
+            >
               <h3>Owner only</h3>
               <div class="action-content">
                 <Form
@@ -334,6 +343,16 @@ const accountNonceResult = useReadContract({
   args: [accountAddress, encodeValidatorNonce(SMART_SESSION_ADDRESS)],
 });
 
+const anySessionAvailable = computed(
+  () => connectedAccount.address.value !== undefined,
+);
+const tokenSessionAvailable = computed(
+  () => connectedLockedExpBalance.value >= parseEther('100'),
+);
+const ownerSessionAvaialble = computed(
+  () => connectedAccount.address.value === accountAddress,
+);
+
 async function useOdysseyChain(): Promise<void> {
   try {
     await switchChainAsync({
@@ -393,7 +412,7 @@ async function mintExp(): Promise<void> {
   if (!connectedAddress.value) {
     return;
   }
-  const mintedAmount = parseEther('100');
+  const mintedAmount = parseEther('200');
   await writeContractAsync({
     abi: expTokenAbi,
     address: EXP_ADDRESS,
@@ -409,7 +428,7 @@ async function lockExp(): Promise<void> {
   if (!connectedAddress.value) {
     return;
   }
-  const lockedAmount = parseEther('50');
+  const lockedAmount = parseEther('100');
   await writeContractAsync({
     abi: expTokenAbi,
     address: EXP_ADDRESS,
@@ -671,19 +690,32 @@ function encodeValidatorNonce(validator: Address): bigint {
 .actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
+  gap: 2px;
 
-h3 {
-  margin: 0;
-}
+  h3 {
+    margin: 0;
+    color: green;
+    font-size: 14px;
+    font-weight: normal;
+  }
 
-.action-content {
-  display: flex;
-  gap: 8px;
-  flex-direction: column;
-  padding: 8px;
-  border: 1px solid #b5b5b5;
-  border-radius: 4px;
+  .action-content {
+    display: flex;
+    gap: 8px;
+    flex-direction: column;
+    padding: 8px;
+    border: 1px solid green;
+    border-radius: 4px;
+  }
+
+  &.forbidden {
+    h3 {
+      color: red;
+    }
+
+    .action-content {
+      border-color: red;
+    }
+  }
 }
 </style>
