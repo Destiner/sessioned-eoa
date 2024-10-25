@@ -8,6 +8,7 @@ import {
   http,
   keccak256,
   padHex,
+  slice,
 } from 'viem';
 import {
   BundlerClient,
@@ -42,8 +43,6 @@ interface Execution {
 const callGasLimit = 1000000n;
 const verificationGasLimit = 2000000n;
 const preVerificationGas = 100000n;
-const maxPriorityFeePerGas = 3500000000n;
-const maxFeePerGas = 4000000000n;
 
 const publicClient = createPublicClient({
   chain: odysseyTestnet,
@@ -131,6 +130,9 @@ async function prepare(
 
   const actualNonce = overrides?.nonce || nonce;
 
+  const { maxFeePerGas, maxPriorityFeePerGas } =
+    await publicClient.estimateFeesPerGas();
+
   const op: Op_0_7 = {
     sender: ownerAddress,
     nonce: actualNonce,
@@ -158,6 +160,9 @@ async function submit(
   bundlerClient: BundlerClient,
   op: Op_0_7,
 ): Promise<Hex> {
+  const gasFees = op.gasFees;
+  const maxPriorityFeePerGas = BigInt(slice(gasFees, 0, 16));
+  const maxFeePerGas = BigInt(slice(gasFees, 16, 32));
   const userOpHash = await sendUserOperation(bundlerClient, {
     entryPointAddress: entryPoint07Address,
     sender: ownerAddress,
