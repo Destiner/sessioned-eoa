@@ -40,11 +40,11 @@ interface Execution {
 }
 
 // Fix: make it dynamic
-const callGasLimit = 1327680n;
-const verificationGasLimit = 2048576n;
+const callGasLimit = 1000000n;
+const verificationGasLimit = 2000000n;
 const preVerificationGas = 100000n;
-const maxPriorityFeePerGas = 2500000000n;
-const maxFeePerGas = 3000000000n;
+const maxPriorityFeePerGas = 3500000000n;
+const maxFeePerGas = 4000000000n;
 
 const ownerPrivateKey = process.env.OWNER_PRIVATE_KEY as Hex | undefined;
 if (!ownerPrivateKey) {

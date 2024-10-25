@@ -11,6 +11,7 @@ import {
 } from "viem";
 
 import erc20Abi from "@/abi/erc20.js";
+import tokenConverterAbi from "@/abi/tokenConverter.js";
 import tokenStakerAbi from "@/abi/tokenStaker.js";
 import wethAbi from "@/abi/weth.js";
 import { getOpHash, prepare, submit } from "./utils/send_op.js";
@@ -48,8 +49,8 @@ const client = createClient({
   transport: http(),
 });
 
-const anySignerOpHash = await sendAnySignerOp();
-console.log("Any Signer Op Hash:", anySignerOpHash);
+// const anySignerOpHash = await sendAnySignerOp();
+// console.log("Any Signer Op Hash:", anySignerOpHash);
 const tokenSignerOpHash = await sendTokenSignerOp();
 console.log("Token Signer Op Hash:", tokenSignerOpHash);
 
@@ -154,6 +155,15 @@ async function sendTokenSignerOp(): Promise<Hex> {
         abi: erc20Abi,
         functionName: "approve",
         args: [TOKEN_CONVERTER, 1n],
+      }),
+    },
+    {
+      target: TOKEN_CONVERTER,
+      value: 0n,
+      callData: encodeFunctionData({
+        abi: tokenConverterAbi,
+        functionName: "convert",
+        args: [1n, true],
       }),
     },
   ]);

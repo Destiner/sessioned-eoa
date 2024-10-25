@@ -73,7 +73,7 @@
           </div>
         </div>
         <div class="account">
-          <h2>Smart account (EOA)</h2>
+          <h2>Smart EOA</h2>
           <div class="account-content">
             <div>
               <div>Address</div>
@@ -190,7 +190,9 @@ import {
   useSwitchChain,
   useWriteContract,
   useConnectorClient,
+  useSignMessage,
 } from '@wagmi/vue';
+import { LibZip } from 'solady';
 import {
   parseEther,
   formatEther,
@@ -198,8 +200,18 @@ import {
   zeroAddress,
   parseGwei,
   SwitchChainError,
+  encodePacked,
+  encodeAbiParameters,
+  encodeFunctionData,
+  http,
+  createPublicClient,
 } from 'viem';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
+import {
+  createBundlerClient,
+  entryPoint07Abi,
+  entryPoint07Address,
+} from 'viem/account-abstraction';
 import { addChain } from 'viem/actions';
 import { odysseyTestnet } from 'viem/chains';
 import { computed, ref } from 'vue';
@@ -214,6 +226,8 @@ import DialogConnectors from '@/components/DialogConnectors.vue';
 import Form from '@/components/Form.vue';
 import Input from '@/components/Input.vue';
 import Select from '@/components/Select.vue';
+import useEnv from '@/composables/useEnv';
+import { Execution, getOpHash, prepare, submit } from '@/utils/sendOp';
 // import { config } from '@/wagmi';
 
 const TOKEN_STAKER_ADDRESS = '0xD54557044A1F7E7ffC92c3dA78Da98BbA49B4e71';
@@ -221,8 +235,11 @@ const EXP_ADDRESS = '0xaa52Be611a9b620aFF67FbC79326e267cc3F2c69';
 const USDC_ADDRESS = '0x649f9eF783A55d318b559809Ea465BC92A7456cC';
 const WETH_ADDRESS = '0x582fCdAEc1D2B61c1F71FC5e3D2791B8c76E44AE';
 const TOKEN_CONVERTER_ADDRESS = '0xD36100d4d3328F29f4D56c6dE4b8a6292f9aa002';
+const SMART_SESSION_ADDRESS = '0x4988c01C4a1B8Bd32E40ecc7561a7669A6CC8295';
 
 const accountAddress = '0xCab9F2377F4BdC15dcCB2D2F3799a03557cF0E7a';
+
+const { bundlerRpc } = useEnv();
 
 const connectorClient = useConnectorClient();
 const connectedAccount = useAccount();
@@ -236,6 +253,7 @@ const { connect } = useConnect();
 const { disconnect } = useDisconnect();
 const { switchChainAsync } = useSwitchChain();
 const { writeContractAsync } = useWriteContract();
+const { signMessageAsync } = useSignMessage();
 const connectedEthBalanceResult = useBalance({
   address: connectedAddress,
 });
@@ -308,6 +326,13 @@ const accountUsdcBalance = computed(() =>
     ? accountUsdcBalanceResult.data.value
     : 0n,
 );
+
+const accountNonceResult = useReadContract({
+  address: entryPoint07Address,
+  abi: entryPoint07Abi,
+  functionName: 'getNonce',
+  args: [accountAddress, encodeValidatorNonce(SMART_SESSION_ADDRESS)],
+});
 
 async function useOdysseyChain(): Promise<void> {
   try {
@@ -410,72 +435,75 @@ async function lockExp(): Promise<void> {
 }
 
 async function wethDeposit(): Promise<void> {
-  // await writeContract(config, {
-  //   abi: wethAbi,
-  //   address: WETH_ADDRESS,
-  //   functionName: 'deposit',
-  //   value: parseEther(wrapAmount.value),
-  // });
-  // accountEthBalance.value = (
-  //   await getBalance(config, {
-  //     address: accountAddress,
-  //   })
-  // ).value;
-  // accountWethBalance.value = await readContract(config, {
-  //   abi: erc20Abi,
-  //   address: WETH_ADDRESS,
-  //   functionName: 'balanceOf',
-  //   args: [accountAddress],
-  // });
+  const amount = parseEther(wrapAmount.value);
+  const opHash = await sendAnySignerOp([
+    {
+      target: WETH_ADDRESS,
+      value: amount,
+      callData: encodeFunctionData({
+        abi: wethAbi,
+        functionName: 'deposit',
+      }),
+    },
+  ]);
+  console.log('opHash', opHash);
+  for (let i = 0; i < 5; i++) {
+    accountEthBalanceResult.refetch();
+    accountWethBalanceResult.refetch();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 async function wethWithdraw(): Promise<void> {
-  // await writeContract(config, {
-  //   abi: wethAbi,
-  //   address: WETH_ADDRESS,
-  //   functionName: 'withdraw',
-  //   args: [parseEther(unwrapAmount.value)],
-  // });
-  // accountEthBalance.value = (
-  //   await getBalance(config, {
-  //     address: accountAddress,
-  //   })
-  // ).value;
-  // accountWethBalance.value = await readContract(config, {
-  //   abi: erc20Abi,
-  //   address: WETH_ADDRESS,
-  //   functionName: 'balanceOf',
-  //   args: [accountAddress],
-  // });
+  const amount = parseEther(unwrapAmount.value);
+  const opHash = await sendAnySignerOp([
+    {
+      target: WETH_ADDRESS,
+      value: 0n,
+      callData: encodeFunctionData({
+        abi: wethAbi,
+        functionName: 'withdraw',
+        args: [amount],
+      }),
+    },
+  ]);
+  console.log('opHash', opHash);
+  for (let i = 0; i < 5; i++) {
+    accountEthBalanceResult.refetch();
+    accountWethBalanceResult.refetch();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 async function convert(): Promise<void> {
   const amount = parseEther(convertAmount.value);
   const token = convertToken.value;
-  // await writeContract(config, {
-  //   abi: erc20Abi,
-  //   address: token,
-  //   functionName: 'approve',
-  //   args: [TOKEN_CONVERTER_ADDRESS, amount],
-  // });
-  // await writeContract(config, {
-  //   abi: tokenConverterAbi,
-  //   address: TOKEN_CONVERTER_ADDRESS,
-  //   functionName: 'convert',
-  //   args: [amount, token === WETH_ADDRESS],
-  // });
-  // accountWethBalance.value = await readContract(config, {
-  //   abi: erc20Abi,
-  //   address: WETH_ADDRESS,
-  //   functionName: 'balanceOf',
-  //   args: [accountAddress],
-  // });
-  // accountUsdcBalance.value = await readContract(config, {
-  //   abi: erc20Abi,
-  //   address: USDC_ADDRESS,
-  //   functionName: 'balanceOf',
-  //   args: [accountAddress],
-  // });
+  const opHash = await sendTokenSignerOp([
+    {
+      target: token,
+      value: 0n,
+      callData: encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [TOKEN_CONVERTER_ADDRESS, amount],
+      }),
+    },
+    {
+      target: TOKEN_CONVERTER_ADDRESS,
+      value: 0n,
+      callData: encodeFunctionData({
+        abi: tokenConverterAbi,
+        functionName: 'convert',
+        args: [amount, token === WETH_ADDRESS],
+      }),
+    },
+  ]);
+  console.log('opHash', opHash);
+  for (let i = 0; i < 5; i++) {
+    accountWethBalanceResult.refetch();
+    accountUsdcBalanceResult.refetch();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 async function transfer(): Promise<void> {
@@ -485,24 +513,108 @@ async function transfer(): Promise<void> {
   if (!isAddress(target)) {
     return;
   }
-  // await writeContract(config, {
-  //   abi: erc20Abi,
-  //   address: token,
-  //   functionName: 'transfer',
-  //   args: [target, amount],
-  // });
-  // accountWethBalance.value = await readContract(config, {
-  //   abi: erc20Abi,
-  //   address: WETH_ADDRESS,
-  //   functionName: 'balanceOf',
-  //   args: [accountAddress],
-  // });
-  // accountUsdcBalance.value = await readContract(config, {
-  //   abi: erc20Abi,
-  //   address: USDC_ADDRESS,
-  //   functionName: 'balanceOf',
-  //   args: [accountAddress],
-  // });
+  // TODO send as user op
+  const txHash = await writeContractAsync({
+    abi: erc20Abi,
+    address: token,
+    functionName: 'transfer',
+    args: [target, amount],
+  });
+  console.log('txHash', txHash);
+  for (let i = 0; i < 5; i++) {
+    accountWethBalanceResult.refetch();
+    accountUsdcBalanceResult.refetch();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+async function sendAnySignerOp(executions: Execution[]): Promise<Hex> {
+  const op = await prepare(accountAddress, executions);
+  await accountNonceResult.refetch();
+  const nonce = accountNonceResult.data.value;
+  if (nonce === undefined) {
+    throw new Error('Failed to get nonce');
+  }
+  op.nonce = nonce;
+  const hash = getOpHash(odysseyTestnet.id, entryPoint07Address, op);
+  if (!hash) {
+    throw new Error('Failed to get hash');
+  }
+  const sessionOwnerSignature = await signMessageAsync({
+    message: {
+      raw: hash,
+    },
+  });
+  const permissionId =
+    '0xb3835f0d5bba72de2b0e64e8e2bb72944c103c2a5a2d2f9a48975ae991643796';
+  op.signature = encodeSessionSignature(permissionId, sessionOwnerSignature);
+  const publicClient = createPublicClient({
+    chain: odysseyTestnet,
+    transport: http(),
+  });
+  const bundlerClient = createBundlerClient({
+    client: publicClient,
+    transport: http(bundlerRpc),
+  });
+  const opHash = await submit(accountAddress, bundlerClient, op);
+  return opHash;
+}
+
+async function sendTokenSignerOp(executions: Execution[]): Promise<Hex> {
+  const op = await prepare(accountAddress, executions);
+  await accountNonceResult.refetch();
+  const nonce = accountNonceResult.data.value;
+  if (nonce === undefined) {
+    throw new Error('Failed to get nonce');
+  }
+  op.nonce = nonce;
+  const hash = getOpHash(odysseyTestnet.id, entryPoint07Address, op);
+  if (!hash) {
+    throw new Error('Failed to get hash');
+  }
+  const sessionOwnerSignature = await signMessageAsync({
+    message: {
+      raw: hash,
+    },
+  });
+  const permissionId =
+    '0xb6d0d36e150601d7d3a465cc34d0031dfc09501d68e37097ec07340cf476fdbd';
+  op.signature = encodeSessionSignature(permissionId, sessionOwnerSignature);
+  const publicClient = createPublicClient({
+    chain: odysseyTestnet,
+    transport: http(),
+  });
+  const bundlerClient = createBundlerClient({
+    client: publicClient,
+    transport: http(bundlerRpc),
+  });
+  const opHash = await submit(accountAddress, bundlerClient, op);
+  return opHash;
+}
+
+function encodeSessionSignature(permissionId: Hex, signature: Hex): Hex {
+  return encodePacked(
+    ['bytes1', 'bytes32', 'bytes'],
+    [
+      '0x00',
+      permissionId,
+      LibZip.flzCompress(
+        encodeAbiParameters(
+          [
+            {
+              type: 'bytes',
+            },
+          ],
+          [signature],
+        ),
+      ) as Hex,
+    ],
+  );
+}
+
+function encodeValidatorNonce(validator: Address): bigint {
+  const hex = `0x0001${validator.slice(2)}0000`;
+  return BigInt(hex);
 }
 </script>
 
