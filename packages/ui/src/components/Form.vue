@@ -5,6 +5,7 @@
       class="input"
       :placeholder
       :disabled
+      :invalid
     />
     <slot />
   </form>
@@ -17,9 +18,10 @@ const input = defineModel<string>({
   required: true,
 });
 
-const { disabled = false } = defineProps<{
+const { disabled = false, invalid = false } = defineProps<{
   placeholder: string;
   disabled?: boolean;
+  invalid?: boolean;
 }>();
 </script>
 

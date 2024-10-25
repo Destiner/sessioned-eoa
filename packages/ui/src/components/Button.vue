@@ -1,5 +1,8 @@
 <template>
-  <button :class="{ primary }">
+  <button
+    :class="{ primary }"
+    :disabled
+  >
     <a
       v-if="url"
       :href="url"
@@ -15,9 +18,10 @@
 </template>
 
 <script setup lang="ts">
-const { primary = false } = defineProps<{
+const { primary = false, disabled = false } = defineProps<{
   label: string;
   primary?: boolean;
+  disabled?: boolean;
   url?: string;
 }>();
 </script>
@@ -31,6 +35,11 @@ button {
   background: white;
   color: black;
   cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   &.primary {
     background: black;

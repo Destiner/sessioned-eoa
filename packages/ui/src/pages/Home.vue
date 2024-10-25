@@ -94,18 +94,30 @@
                 <Form
                   v-model="wrapAmount"
                   placeholder="amount"
+                  :invalid="!isWethDepositInputValid"
                 >
                   <Button
                     label="Wrap Ether"
+                    :disabled="
+                      !isWethDepositInputValid ||
+                      wrapAmount === '' ||
+                      !isConnected
+                    "
                     @click="wethDeposit"
                   />
                 </Form>
                 <Form
                   v-model="unwrapAmount"
                   placeholder="amount"
+                  :invalid="!isWethWithdrawInputValid"
                 >
                   <Button
                     label="Unwrap Ether"
+                    :disabled="
+                      !isWethWithdrawInputValid ||
+                      unwrapAmount === '' ||
+                      !isConnected
+                    "
                     @click="wethWithdraw"
                   />
                 </Form>
@@ -120,6 +132,7 @@
                 <Form
                   v-model="convertAmount"
                   placeholder="amount"
+                  :invalid="!isConvertInputValid"
                 >
                   <Select
                     v-model="convertToken"
@@ -145,6 +158,9 @@
                 </Form>
                 <Button
                   label="Swap"
+                  :disabled="
+                    !isConvertInputValid || convertAmount === '' || !isConnected
+                  "
                   @click="convert"
                 />
               </div>
@@ -158,6 +174,7 @@
                 <Form
                   v-model="transferAmount"
                   placeholder="amount"
+                  :invalid="!isTransferInputValid"
                 >
                   <Select
                     v-model="transferToken"
@@ -173,6 +190,11 @@
                 />
                 <Button
                   label="Send"
+                  :disabled="
+                    !isTransferInputValid ||
+                    transferAmount === '' ||
+                    !isConnected
+                  "
                   @click="transfer"
                 />
               </div>
@@ -343,6 +365,8 @@ const accountNonceResult = useReadContract({
   args: [accountAddress, encodeValidatorNonce(SMART_SESSION_ADDRESS)],
 });
 
+///// Session validation
+
 const anySessionAvailable = computed(
   () => connectedAccount.address.value !== undefined,
 );
@@ -351,6 +375,39 @@ const tokenSessionAvailable = computed(
 );
 const ownerSessionAvaialble = computed(
   () => connectedAccount.address.value === accountAddress,
+);
+
+///// Input validation
+
+const isWethDepositInputValid = computed(
+  () =>
+    wrapAmount.value === '' ||
+    (!isNaN(parseFloat(wrapAmount.value)) &&
+      parseEther(wrapAmount.value) < accountEthBalance.value),
+);
+const isWethWithdrawInputValid = computed(
+  () =>
+    unwrapAmount.value === '' ||
+    (!isNaN(parseFloat(unwrapAmount.value)) &&
+      parseEther(unwrapAmount.value) < accountWethBalance.value),
+);
+const isConvertInputValid = computed(
+  () =>
+    convertAmount.value === '' ||
+    (!isNaN(parseFloat(convertAmount.value)) &&
+      ((convertToken.value === WETH_ADDRESS &&
+        parseEther(convertAmount.value) < accountWethBalance.value) ||
+        (convertToken.value === USDC_ADDRESS &&
+          parseEther(convertAmount.value) < accountUsdcBalance.value))),
+);
+const isTransferInputValid = computed(
+  () =>
+    transferAmount.value === '' ||
+    (!isNaN(parseFloat(transferAmount.value)) &&
+      ((transferToken.value === WETH_ADDRESS &&
+        parseEther(transferAmount.value) < accountWethBalance.value) ||
+        (transferToken.value === USDC_ADDRESS &&
+          parseEther(transferAmount.value) < accountUsdcBalance.value))),
 );
 
 async function useOdysseyChain(): Promise<void> {
@@ -435,13 +492,7 @@ async function lockExp(): Promise<void> {
     functionName: 'approve',
     args: [TOKEN_STAKER_ADDRESS, lockedAmount],
   });
-  console.log('allowance', connectedExpAllowance.value, lockedAmount);
   while (connectedExpAllowance.value < lockedAmount) {
-    console.log(
-      'waiting for allowance',
-      connectedExpAllowance.value,
-      lockedAmount,
-    );
     await new Promise((resolve) => setTimeout(resolve, 1000));
     connectedExpAllowanceResult.refetch();
   }
