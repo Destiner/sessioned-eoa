@@ -8,11 +8,13 @@ import {
   http,
   keccak256,
   padHex,
+  size,
   slice,
 } from 'viem';
 import {
   BundlerClient,
   entryPoint07Address,
+  PaymasterClient,
   sendUserOperation,
 } from 'viem/account-abstraction';
 import { readContract } from 'viem/actions';
@@ -41,8 +43,10 @@ interface Execution {
 
 // Fix: make it dynamic
 const callGasLimit = 1000000n;
-const verificationGasLimit = 2000000n;
+const verificationGasLimit = 1000000n;
 const preVerificationGas = 100000n;
+const paymasterPostOpGasLimit = 200_000n;
+const paymasterVerificationGasLimit = 200_000n;
 
 const publicClient = createPublicClient({
   chain: odysseyTestnet,
@@ -84,6 +88,7 @@ function getOpHash(chain: number, entryPoint: Address, op: Op_0_7): Hex | null {
 
 async function prepare(
   ownerAddress: Address,
+  paymasterClient: PaymasterClient,
   executions: Execution[],
   overrides?: {
     nonce?: bigint;
@@ -133,6 +138,28 @@ async function prepare(
   const { maxFeePerGas, maxPriorityFeePerGas } =
     await publicClient.estimateFeesPerGas();
 
+  const { paymaster, paymasterData } = await paymasterClient.getPaymasterData({
+    chainId: odysseyTestnet.id,
+    entryPointAddress: entryPoint07Address,
+    callData,
+    callGasLimit,
+    verificationGasLimit,
+    preVerificationGas,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+    paymasterPostOpGasLimit,
+    paymasterVerificationGasLimit,
+    nonce: actualNonce,
+    sender: ownerAddress,
+  });
+
+  console.log('prepare', {
+    paymaster,
+    paymasterData,
+    paymasterPostOpGasLimit,
+    paymasterVerificationGasLimit,
+  });
+
   const op: Op_0_7 = {
     sender: ownerAddress,
     nonce: actualNonce,
@@ -148,7 +175,20 @@ async function prepare(
       padHex(maxPriorityFeePerGas.toString(16) as Hex, { size: 16 }),
       padHex(maxFeePerGas.toString(16) as Hex, { size: 16 }),
     ]),
-    paymasterAndData: '0x',
+    paymasterAndData:
+      paymaster &&
+      paymasterData &&
+      paymasterVerificationGasLimit &&
+      paymasterPostOpGasLimit
+        ? concat([
+            padHex(paymaster.toLowerCase() as Hex, { size: 20 }),
+            padHex(paymasterVerificationGasLimit.toString(16) as Hex, {
+              size: 16,
+            }),
+            padHex(paymasterPostOpGasLimit.toString(16) as Hex, { size: 16 }),
+            paymasterData,
+          ])
+        : '0x',
     signature: '0x',
   };
 
@@ -163,6 +203,18 @@ async function submit(
   const gasFees = op.gasFees;
   const maxPriorityFeePerGas = BigInt(slice(gasFees, 0, 16));
   const maxFeePerGas = BigInt(slice(gasFees, 16, 32));
+  const paymaster =
+    size(op.paymasterAndData) > 0 ? slice(op.paymasterAndData, 0, 20) : '0x';
+  const paymasterVerificationGasLimit =
+    size(op.paymasterAndData) > 0
+      ? BigInt(slice(op.paymasterAndData, 20, 36))
+      : 0n;
+  const paymasterPostOpGasLimit =
+    size(op.paymasterAndData) > 0
+      ? BigInt(slice(op.paymasterAndData, 36, 52))
+      : 0n;
+  const paymasterData =
+    size(op.paymasterAndData) > 0 ? slice(op.paymasterAndData, 52) : '0x';
   const userOpHash = await sendUserOperation(bundlerClient, {
     entryPointAddress: entryPoint07Address,
     sender: ownerAddress,
@@ -174,6 +226,10 @@ async function submit(
     maxPriorityFeePerGas,
     maxFeePerGas,
     signature: op.signature,
+    paymaster,
+    paymasterData,
+    paymasterPostOpGasLimit,
+    paymasterVerificationGasLimit,
   });
 
   return userOpHash;

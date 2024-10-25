@@ -317,6 +317,7 @@ import {
 import type { Address, Hex } from 'viem';
 import {
   createBundlerClient,
+  createPaymasterClient,
   entryPoint07Abi,
   entryPoint07Address,
 } from 'viem/account-abstraction';
@@ -346,7 +347,7 @@ const SMART_SESSION_ADDRESS = '0x4988c01C4a1B8Bd32E40ecc7561a7669A6CC8295';
 
 const accountAddress = '0xCab9F2377F4BdC15dcCB2D2F3799a03557cF0E7a';
 
-const { bundlerRpc } = useEnv();
+const { bundlerRpc, paymasterRpc } = useEnv();
 
 const connectorClient = useConnectorClient();
 const connectedAccount = useAccount();
@@ -800,13 +801,17 @@ async function getOpTxHash(opHash: Hex): Promise<Hex | null> {
 }
 
 async function sendAnySignerOp(executions: Execution[]): Promise<Hex | null> {
-  const op = await prepare(accountAddress, executions);
+  const paymasterClient = createPaymasterClient({
+    transport: http(paymasterRpc),
+  });
   await accountNonceResult.refetch();
   const nonce = accountNonceResult.data.value;
   if (nonce === undefined) {
     throw new Error('Failed to get nonce');
   }
-  op.nonce = nonce;
+  const op = await prepare(accountAddress, paymasterClient, executions, {
+    nonce,
+  });
   const hash = getOpHash(odysseyTestnet.id, entryPoint07Address, op);
   if (!hash) {
     throw new Error('Failed to get hash');
@@ -836,13 +841,17 @@ async function sendAnySignerOp(executions: Execution[]): Promise<Hex | null> {
 }
 
 async function sendTokenSignerOp(executions: Execution[]): Promise<Hex | null> {
-  const op = await prepare(accountAddress, executions);
+  const paymasterClient = createPaymasterClient({
+    transport: http(paymasterRpc),
+  });
   await accountNonceResult.refetch();
   const nonce = accountNonceResult.data.value;
   if (nonce === undefined) {
     throw new Error('Failed to get nonce');
   }
-  op.nonce = nonce;
+  const op = await prepare(accountAddress, paymasterClient, executions, {
+    nonce,
+  });
   const hash = getOpHash(odysseyTestnet.id, entryPoint07Address, op);
   if (!hash) {
     throw new Error('Failed to get hash');

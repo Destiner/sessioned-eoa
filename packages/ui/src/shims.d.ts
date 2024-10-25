@@ -8,5 +8,6 @@ declare module '*.vue' {
 interface ImportMeta {
   env: {
     VITE_BUNDLER_RPC?: string;
+    VITE_PAYMASTER_RPC?: string;
   };
 }
