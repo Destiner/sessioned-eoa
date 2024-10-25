@@ -13,9 +13,24 @@
               />
             </template>
             <template v-else>
-              <div>
-                <div>Address</div>
-                <div>{{ connectedAddress }}</div>
+              <div class="account-header">
+                <div>
+                  <div>Address</div>
+                  <div>{{ connectedAddress }}</div>
+                </div>
+                <div>
+                  <div>Chain</div>
+                  <div v-if="connectedChainId === odysseyTestnet.id">
+                    Odyssey Testnet
+                  </div>
+                  <div v-else>
+                    <Button
+                      label="Use Odyssey"
+                      primary
+                      @click="useOdysseyChain"
+                    />
+                  </div>
+                </div>
                 <Button
                   label="Disconnect"
                   @click="handleDisconnectClick"
@@ -167,17 +182,27 @@
 <script setup lang="ts">
 import type { Connector } from '@wagmi/core';
 import {
-  connect,
-  disconnect,
-  getBalance,
-  readContract,
-  switchChain,
-  writeContract,
-} from '@wagmi/core';
-import { parseEther, formatEther, isAddress } from 'viem';
+  useAccount,
+  useBalance,
+  useConnect,
+  useDisconnect,
+  useReadContract,
+  useSwitchChain,
+  useWriteContract,
+  useConnectorClient,
+} from '@wagmi/vue';
+import {
+  parseEther,
+  formatEther,
+  isAddress,
+  zeroAddress,
+  parseGwei,
+  SwitchChainError,
+} from 'viem';
 import type { Address } from 'viem';
+import { addChain } from 'viem/actions';
 import { odysseyTestnet } from 'viem/chains';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 import erc20Abi from '@/abi/erc20.js';
 import expTokenAbi from '@/abi/expToken.js';
@@ -189,7 +214,7 @@ import DialogConnectors from '@/components/DialogConnectors.vue';
 import Form from '@/components/Form.vue';
 import Input from '@/components/Input.vue';
 import Select from '@/components/Select.vue';
-import { config } from '@/wagmi';
+// import { config } from '@/wagmi';
 
 const TOKEN_STAKER_ADDRESS = '0xD54557044A1F7E7ffC92c3dA78Da98BbA49B4e71';
 const EXP_ADDRESS = '0xaa52Be611a9b620aFF67FbC79326e267cc3F2c69';
@@ -199,93 +224,123 @@ const TOKEN_CONVERTER_ADDRESS = '0xD36100d4d3328F29f4D56c6dE4b8a6292f9aa002';
 
 const accountAddress = '0xCab9F2377F4BdC15dcCB2D2F3799a03557cF0E7a';
 
-const isConnected = ref(false);
-const connectedAddress = ref<Address | null>(null);
+const connectorClient = useConnectorClient();
+const connectedAccount = useAccount();
+const isConnected = computed(() => connectedAccount.isConnected.value);
+const connectedAddress = computed(
+  () => connectedAccount.address.value || zeroAddress,
+);
+const connectedChainId = computed(() => connectedAccount.chainId.value);
+
+const { connect } = useConnect();
+const { disconnect } = useDisconnect();
+const { switchChainAsync } = useSwitchChain();
+const { writeContractAsync } = useWriteContract();
+const connectedEthBalanceResult = useBalance({
+  address: connectedAddress,
+});
+const connectedEthBalance = computed(() =>
+  connectedEthBalanceResult.data.value
+    ? connectedEthBalanceResult.data.value.value
+    : 0n,
+);
+const connectedExpBalanceResult = useReadContract({
+  abi: erc20Abi,
+  address: EXP_ADDRESS,
+  functionName: 'balanceOf',
+  args: [connectedAddress],
+});
+const connectedExpBalance = computed(() =>
+  connectedExpBalanceResult.data.value
+    ? connectedExpBalanceResult.data.value
+    : 0n,
+);
+const connectedExpAllowanceResult = useReadContract({
+  abi: erc20Abi,
+  address: EXP_ADDRESS,
+  functionName: 'allowance',
+  args: [connectedAddress, TOKEN_STAKER_ADDRESS],
+});
+const connectedExpAllowance = computed(() =>
+  connectedExpAllowanceResult.data.value
+    ? connectedExpAllowanceResult.data.value
+    : 0n,
+);
+const connectedLockedExpBalanceResult = useReadContract({
+  abi: tokenStakerAbi,
+  address: TOKEN_STAKER_ADDRESS,
+  functionName: 'erc20StakeOf',
+  args: [connectedAddress, EXP_ADDRESS, accountAddress],
+});
+const connectedLockedExpBalance = computed(() =>
+  connectedLockedExpBalanceResult.data.value
+    ? connectedLockedExpBalanceResult.data.value
+    : 0n,
+);
+
+const accountEthBalanceResult = useBalance({
+  address: accountAddress,
+});
+const accountEthBalance = computed(() =>
+  accountEthBalanceResult.data.value
+    ? accountEthBalanceResult.data.value.value
+    : 0n,
+);
+const accountWethBalanceResult = useReadContract({
+  abi: erc20Abi,
+  address: WETH_ADDRESS,
+  functionName: 'balanceOf',
+  args: [accountAddress],
+});
+const accountWethBalance = computed(() =>
+  accountWethBalanceResult.data.value
+    ? accountWethBalanceResult.data.value
+    : 0n,
+);
+const accountUsdcBalanceResult = useReadContract({
+  abi: erc20Abi,
+  address: USDC_ADDRESS,
+  functionName: 'balanceOf',
+  args: [accountAddress],
+});
+const accountUsdcBalance = computed(() =>
+  accountUsdcBalanceResult.data.value
+    ? accountUsdcBalanceResult.data.value
+    : 0n,
+);
+
+async function useOdysseyChain(): Promise<void> {
+  try {
+    await switchChainAsync({
+      chainId: odysseyTestnet.id,
+    });
+  } catch (e: unknown) {
+    if (e instanceof SwitchChainError) {
+      if (e.code === SwitchChainError.code) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        await addChain(connectorClient.data.value, {
+          chain: odysseyTestnet,
+        });
+        useOdysseyChain();
+      }
+    }
+  }
+}
 
 const isConnectorModalOpen = ref(false);
 function openConnectorModal(): void {
   isConnectorModalOpen.value = true;
 }
 async function handleConnectorSelect(connector: Connector): Promise<void> {
-  isConnected.value = true;
   isConnectorModalOpen.value = false;
-  const connectionResult = await connect(config, {
+  connect({
     connector,
+    chainId: odysseyTestnet.id,
   });
-  await switchChain(config, { chainId: odysseyTestnet.id });
-  connectedAddress.value = connectionResult.accounts[0];
-  fetchConnectedBalance();
 }
 function handleDisconnectClick(): void {
-  isConnected.value = false;
-  disconnect(config);
-}
-
-const connectedEthBalance = ref<bigint>(0n);
-const connectedExpBalance = ref<bigint>(0n);
-const connectedLockedExpBalance = ref<bigint>(0n);
-
-const accountEthBalance = ref<bigint>(0n);
-const accountWethBalance = ref<bigint>(0n);
-const accountUsdcBalance = ref<bigint>(0n);
-
-onMounted(() => {
-  fetchBalances();
-});
-
-async function fetchBalances(): Promise<void> {
-  fetchConnectedBalance();
-  fetchAccountBalance();
-}
-
-watch(
-  () => connectedAddress,
-  () => {
-    fetchConnectedBalance();
-  },
-);
-
-async function fetchConnectedBalance(): Promise<void> {
-  if (!connectedAddress.value) {
-    return;
-  }
-  connectedEthBalance.value = (
-    await getBalance(config, {
-      address: connectedAddress.value,
-    })
-  ).value;
-  connectedExpBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: EXP_ADDRESS,
-    functionName: 'balanceOf',
-    args: [connectedAddress.value],
-  });
-  connectedLockedExpBalance.value = await readContract(config, {
-    abi: tokenStakerAbi,
-    address: TOKEN_STAKER_ADDRESS,
-    functionName: 'erc20StakeOf',
-    args: [connectedAddress.value, EXP_ADDRESS, accountAddress],
-  });
-}
-
-async function fetchAccountBalance(): Promise<void> {
-  accountEthBalance.value = (
-    await getBalance(config, {
-      address: accountAddress,
-    })
-  ).value;
-  accountWethBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: WETH_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
-  accountUsdcBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: USDC_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
+  disconnect();
 }
 
 const wrapAmount = ref<string>('');
@@ -314,18 +369,15 @@ async function mintExp(): Promise<void> {
     return;
   }
   const mintedAmount = parseEther('100');
-  await writeContract(config, {
+  await writeContractAsync({
     abi: expTokenAbi,
     address: EXP_ADDRESS,
     functionName: 'mint',
     args: [connectedAddress.value, mintedAmount],
+    maxPriorityFeePerGas: parseGwei('5'),
+    maxFeePerGas: parseGwei('6'),
   });
-  connectedEthBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: WETH_ADDRESS,
-    functionName: 'balanceOf',
-    args: [connectedAddress.value],
-  });
+  connectedExpBalanceResult.refetch();
 }
 
 async function lockExp(): Promise<void> {
@@ -333,99 +385,97 @@ async function lockExp(): Promise<void> {
     return;
   }
   const lockedAmount = parseEther('50');
-  await writeContract(config, {
+  await writeContractAsync({
     abi: expTokenAbi,
     address: EXP_ADDRESS,
     functionName: 'approve',
     args: [TOKEN_STAKER_ADDRESS, lockedAmount],
   });
-  await writeContract(config, {
+  console.log('allowance', connectedExpAllowance.value, lockedAmount);
+  while (connectedExpAllowance.value < lockedAmount) {
+    console.log(
+      'waiting for allowance',
+      connectedExpAllowance.value,
+      lockedAmount,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    connectedExpAllowanceResult.refetch();
+  }
+  await writeContractAsync({
     abi: tokenStakerAbi,
     address: TOKEN_STAKER_ADDRESS,
     functionName: 'stakeErc20',
     args: [accountAddress, EXP_ADDRESS, lockedAmount],
   });
-  connectedExpBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: EXP_ADDRESS,
-    functionName: 'balanceOf',
-    args: [connectedAddress.value],
-  });
-  connectedLockedExpBalance.value = await readContract(config, {
-    abi: tokenStakerAbi,
-    address: TOKEN_STAKER_ADDRESS,
-    functionName: 'erc20StakeOf',
-    args: [connectedAddress.value, EXP_ADDRESS, accountAddress],
-  });
 }
 
 async function wethDeposit(): Promise<void> {
-  await writeContract(config, {
-    abi: wethAbi,
-    address: WETH_ADDRESS,
-    functionName: 'deposit',
-    value: parseEther(wrapAmount.value),
-  });
-  accountEthBalance.value = (
-    await getBalance(config, {
-      address: accountAddress,
-    })
-  ).value;
-  accountWethBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: WETH_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
+  // await writeContract(config, {
+  //   abi: wethAbi,
+  //   address: WETH_ADDRESS,
+  //   functionName: 'deposit',
+  //   value: parseEther(wrapAmount.value),
+  // });
+  // accountEthBalance.value = (
+  //   await getBalance(config, {
+  //     address: accountAddress,
+  //   })
+  // ).value;
+  // accountWethBalance.value = await readContract(config, {
+  //   abi: erc20Abi,
+  //   address: WETH_ADDRESS,
+  //   functionName: 'balanceOf',
+  //   args: [accountAddress],
+  // });
 }
 
 async function wethWithdraw(): Promise<void> {
-  await writeContract(config, {
-    abi: wethAbi,
-    address: WETH_ADDRESS,
-    functionName: 'withdraw',
-    args: [parseEther(unwrapAmount.value)],
-  });
-  accountEthBalance.value = (
-    await getBalance(config, {
-      address: accountAddress,
-    })
-  ).value;
-  accountWethBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: WETH_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
+  // await writeContract(config, {
+  //   abi: wethAbi,
+  //   address: WETH_ADDRESS,
+  //   functionName: 'withdraw',
+  //   args: [parseEther(unwrapAmount.value)],
+  // });
+  // accountEthBalance.value = (
+  //   await getBalance(config, {
+  //     address: accountAddress,
+  //   })
+  // ).value;
+  // accountWethBalance.value = await readContract(config, {
+  //   abi: erc20Abi,
+  //   address: WETH_ADDRESS,
+  //   functionName: 'balanceOf',
+  //   args: [accountAddress],
+  // });
 }
 
 async function convert(): Promise<void> {
   const amount = parseEther(convertAmount.value);
   const token = convertToken.value;
-  await writeContract(config, {
-    abi: erc20Abi,
-    address: token,
-    functionName: 'approve',
-    args: [TOKEN_CONVERTER_ADDRESS, amount],
-  });
-  await writeContract(config, {
-    abi: tokenConverterAbi,
-    address: TOKEN_CONVERTER_ADDRESS,
-    functionName: 'convert',
-    args: [amount, token === WETH_ADDRESS],
-  });
-  accountWethBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: WETH_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
-  accountUsdcBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: USDC_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
+  // await writeContract(config, {
+  //   abi: erc20Abi,
+  //   address: token,
+  //   functionName: 'approve',
+  //   args: [TOKEN_CONVERTER_ADDRESS, amount],
+  // });
+  // await writeContract(config, {
+  //   abi: tokenConverterAbi,
+  //   address: TOKEN_CONVERTER_ADDRESS,
+  //   functionName: 'convert',
+  //   args: [amount, token === WETH_ADDRESS],
+  // });
+  // accountWethBalance.value = await readContract(config, {
+  //   abi: erc20Abi,
+  //   address: WETH_ADDRESS,
+  //   functionName: 'balanceOf',
+  //   args: [accountAddress],
+  // });
+  // accountUsdcBalance.value = await readContract(config, {
+  //   abi: erc20Abi,
+  //   address: USDC_ADDRESS,
+  //   functionName: 'balanceOf',
+  //   args: [accountAddress],
+  // });
 }
 
 async function transfer(): Promise<void> {
@@ -435,24 +485,24 @@ async function transfer(): Promise<void> {
   if (!isAddress(target)) {
     return;
   }
-  await writeContract(config, {
-    abi: erc20Abi,
-    address: token,
-    functionName: 'transfer',
-    args: [target, amount],
-  });
-  accountWethBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: WETH_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
-  accountUsdcBalance.value = await readContract(config, {
-    abi: erc20Abi,
-    address: USDC_ADDRESS,
-    functionName: 'balanceOf',
-    args: [accountAddress],
-  });
+  // await writeContract(config, {
+  //   abi: erc20Abi,
+  //   address: token,
+  //   functionName: 'transfer',
+  //   args: [target, amount],
+  // });
+  // accountWethBalance.value = await readContract(config, {
+  //   abi: erc20Abi,
+  //   address: WETH_ADDRESS,
+  //   functionName: 'balanceOf',
+  //   args: [accountAddress],
+  // });
+  // accountUsdcBalance.value = await readContract(config, {
+  //   abi: erc20Abi,
+  //   address: USDC_ADDRESS,
+  //   functionName: 'balanceOf',
+  //   args: [accountAddress],
+  // });
 }
 </script>
 
@@ -490,6 +540,12 @@ async function transfer(): Promise<void> {
 }
 
 .account-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.account-header {
   display: flex;
   flex-direction: column;
   gap: 8px;

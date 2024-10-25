@@ -1,17 +1,31 @@
-import withNuxt from './.nuxt/eslint.config.mjs';
+import js from '@eslint/js';
+import eslintPluginImportX from 'eslint-plugin-import-x';
+import pluginVue from 'eslint-plugin-vue';
+import { configs as tsConfigs, parser as tsParser } from 'typescript-eslint';
+import parserVue from 'vue-eslint-parser';
 
-export default withNuxt(
+export default [
+  js.configs.recommended,
+  eslintPluginImportX.flatConfigs.recommended,
+  eslintPluginImportX.flatConfigs.typescript,
+  ...tsConfigs.recommended,
+  ...pluginVue.configs['flat/recommended'],
   {
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2020,
+      sourceType: 'module',
+    },
     rules: {
-      'import/first': 'error',
-      'import/exports-last': 'error',
-      'import/newline-after-import': 'error',
-      'import/prefer-default-export': 'error',
-      'import/group-exports': 'error',
-      'import/no-duplicates': 'error',
-      'import/no-amd': 'error',
-      'import/no-commonjs': 'error',
-      'import/order': [
+      'import-x/first': 'error',
+      'import-x/exports-last': 'error',
+      'import-x/newline-after-import': 'error',
+      'import-x/prefer-default-export': 'error',
+      'import-x/group-exports': 'error',
+      'import-x/no-duplicates': 'error',
+      'import-x/no-amd': 'error',
+      'import-x/no-commonjs': 'error',
+      'import-x/order': [
         'error',
         {
           groups: [
@@ -28,11 +42,17 @@ export default withNuxt(
           },
         },
       ],
-      'import/no-unused-modules': 'error',
-      'import/no-mutable-exports': 'error',
-      'import/no-extraneous-dependencies': [
+      'import-x/no-unused-modules': 'error',
+      'import-x/no-mutable-exports': 'error',
+      'import-x/no-extraneous-dependencies': [
         'error',
-        { devDependencies: ['vite.config.ts', 'test/**/*.test.ts'] },
+        {
+          devDependencies: [
+            'eslint.config.js',
+            'vite.config.ts',
+            'test/**/*.test.ts',
+          ],
+        },
       ],
       '@typescript-eslint/explicit-function-return-type': 'error',
       'vue/component-api-style': ['error', ['script-setup']],
@@ -83,14 +103,18 @@ export default withNuxt(
     },
   },
   {
-    files: [
-      'app/pages/**/*.vue',
-      'app/components/_app/*.vue',
-      'app/components/__common/attributes/*.vue',
-      'app/components/__common/icon/**/*.vue',
-    ],
+    files: ['*.vue', '**/*.vue'],
+    languageOptions: {
+      parser: parserVue,
+      parserOptions: {
+        parser: '@typescript-eslint/parser',
+      },
+    },
+  },
+  {
+    files: ['src/pages/**/*.vue'],
     rules: {
       'vue/multi-word-component-names': 'off',
     },
   },
-);
+];
