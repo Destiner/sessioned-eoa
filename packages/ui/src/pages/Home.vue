@@ -127,7 +127,7 @@
               class="actions"
               :class="{ forbidden: !anySessionAvailable }"
             >
-              <h3>Everyone</h3>
+              <h3>Connected account</h3>
               <div class="action-content">
                 <Form
                   v-model="wrapAmount"
