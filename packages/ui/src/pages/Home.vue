@@ -644,6 +644,8 @@ async function lockExp(): Promise<void> {
     isLockingExp.value = false;
     return;
   }
+  connectedExpBalanceResult.refetch();
+  connectedLockedExpBalanceResult.refetch();
 }
 
 async function wethDeposit(): Promise<void> {
