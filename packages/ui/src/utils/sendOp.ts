@@ -45,8 +45,6 @@ interface Execution {
 const callGasLimit = 1000000n;
 const verificationGasLimit = 1000000n;
 const preVerificationGas = 100000n;
-const paymasterPostOpGasLimit = 200_000n;
-const paymasterVerificationGasLimit = 200_000n;
 
 const publicClient = createPublicClient({
   chain: odysseyTestnet,
@@ -137,6 +135,20 @@ async function prepare(
 
   const { maxFeePerGas, maxPriorityFeePerGas } =
     await publicClient.estimateFeesPerGas();
+
+  const { paymasterPostOpGasLimit, paymasterVerificationGasLimit } =
+    await paymasterClient.getPaymasterStubData({
+      chainId: odysseyTestnet.id,
+      entryPointAddress: entryPoint07Address,
+      callData,
+      callGasLimit,
+      verificationGasLimit,
+      preVerificationGas,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      nonce: actualNonce,
+      sender: ownerAddress,
+    });
 
   const { paymaster, paymasterData } = await paymasterClient.getPaymasterData({
     chainId: odysseyTestnet.id,
