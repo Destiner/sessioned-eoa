@@ -153,13 +153,6 @@ async function prepare(
     sender: ownerAddress,
   });
 
-  console.log('prepare', {
-    paymaster,
-    paymasterData,
-    paymasterPostOpGasLimit,
-    paymasterVerificationGasLimit,
-  });
-
   const op: Op_0_7 = {
     sender: ownerAddress,
     nonce: actualNonce,
