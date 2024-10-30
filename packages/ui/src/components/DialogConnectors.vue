@@ -29,10 +29,8 @@
 
 <script setup lang="ts">
 import type { Connector } from '@wagmi/core';
-import { getConnectors } from '@wagmi/core';
+import { useConnectors } from '@wagmi/vue';
 import { Dialog } from 'radix-vue/namespaced';
-
-import { config } from '@/wagmi';
 
 const open = defineModel<boolean>({
   required: true,
@@ -42,7 +40,7 @@ const emit = defineEmits<{
   select: [value: Connector];
 }>();
 
-const connectors = getConnectors(config);
+const connectors = useConnectors();
 
 function handleClick(connector: Connector): void {
   emit('select', connector);
