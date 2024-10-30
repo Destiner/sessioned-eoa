@@ -11,7 +11,12 @@
             @click="() => handleClick(connector)"
           >
             <img
+              v-if="connector.icon"
               :src="connector.icon"
+              class="icon"
+            />
+            <div
+              v-else
               class="icon"
             />
             {{ connector.name }}
