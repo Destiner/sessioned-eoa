@@ -12,14 +12,14 @@ import {
 import { odysseyTestnet } from "viem/chains";
 import { privateKeyToAccount, sign } from "viem/accounts";
 import { readContract } from "viem/actions";
-
-import entryPoint070Abi from "@/abi/entryPoint0_7_0.js";
-import kernelV3ImplementationAbi from "@/abi/kernelV3Implementation.js";
-import { ENTRY_POINT_0_7_0 } from "./common.js";
 import {
   createBundlerClient,
+  entryPoint07Abi,
+  entryPoint07Address,
   sendUserOperation,
 } from "viem/account-abstraction";
+
+import kernelV3ImplementationAbi from "@/abi/kernelV3Implementation.js";
 
 interface Op_0_7 {
   sender: Address;
@@ -138,8 +138,8 @@ async function prepare(
   });
 
   const nonce = await readContract(publicClient, {
-    address: ENTRY_POINT_0_7_0,
-    abi: entryPoint070Abi,
+    address: entryPoint07Address,
+    abi: entryPoint07Abi,
     functionName: "getNonce",
     args: [owner.address, 0n],
   });
@@ -170,7 +170,7 @@ async function prepare(
 
 async function submit(op: Op_0_7): Promise<Hex> {
   const userOpHash = await sendUserOperation(bundlerClient, {
-    entryPointAddress: ENTRY_POINT_0_7_0,
+    entryPointAddress: entryPoint07Address,
     sender: owner.address,
     nonce: op.nonce,
     callData: op.callData,
@@ -224,8 +224,8 @@ async function send(
   });
 
   const nonce = await readContract(publicClient, {
-    address: ENTRY_POINT_0_7_0,
-    abi: entryPoint070Abi,
+    address: entryPoint07Address,
+    abi: entryPoint07Abi,
     functionName: "getNonce",
     args: [owner.address, 0n],
   });
@@ -251,7 +251,7 @@ async function send(
     signature: "0x",
   };
 
-  const opHash = getOpHash(odysseyTestnet.id, ENTRY_POINT_0_7_0, op);
+  const opHash = getOpHash(odysseyTestnet.id, entryPoint07Address, op);
   if (!opHash) {
     console.error("Failed to get op hash");
     process.exit(1);
@@ -274,7 +274,7 @@ async function send(
   const actualSignature = overrides?.signature || signatureHex;
 
   const userOpHash = await sendUserOperation(bundlerClient, {
-    entryPointAddress: ENTRY_POINT_0_7_0,
+    entryPointAddress: entryPoint07Address,
     sender: owner.address,
     nonce,
     callData,
